@@ -21,8 +21,14 @@ class Settings(BaseSettings):
     env: Literal["development", "production"] = "development"
     log_level: str = "INFO"
 
-    # ── LLM ───────────────────────────────────────────────────────────────────
-    # anthropic_api_key: SecretStr = Field(..., description="Anthropic API key")
+    # ── LLM provider: "ollama" (default, local) | "anthropic" ────────────────
+    llm_provider: str = "ollama"
+
+    # Ollama (local, no API key required)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
+
+    # Anthropic (optional — set llm_provider=anthropic to use)
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-4-6"
 

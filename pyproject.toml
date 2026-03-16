@@ -13,6 +13,7 @@ dependencies = [
     "langchain-community>=0.3.0",
     "langchain-openai>=0.2.0",
     "langchain-anthropic>=0.3.0",
+    "langchain-ollama>=0.2.0",
     # LLM
     "anthropic>=0.40.0",
     # Embeddings (local BGE model via sentence-transformers)

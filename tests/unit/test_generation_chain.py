@@ -115,6 +115,7 @@ async def test_generate_raises_generation_error_after_max_retries() -> None:
 @pytest.mark.asyncio
 async def test_generate_raises_when_no_api_key() -> None:
     with patch("app.generation.chain._settings") as mock_settings:
+        mock_settings.llm_provider = "anthropic"
         mock_settings.anthropic_api_key = None
         with pytest.raises(GenerationError, match="ANTHROPIC_API_KEY"):
             await generate("question?", _CHUNKS)
