@@ -25,10 +25,13 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = Field(..., description="Anthropic API key")
     anthropic_model: str = "claude-sonnet-4-6"
 
-    # ── Embeddings ────────────────────────────────────────────────────────────
-    openai_api_key: SecretStr = Field(..., description="OpenAI API key for embeddings")
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dimensions: int = 1536
+    # ── Embeddings (local sentence-transformers) ──────────────────────────────
+    embedding_model: str = "BAAI/bge-large-en-v1.5"
+    embedding_dimensions: int = 1024  # BGE-large-en-v1.5 output size
+    embedding_device: str = "cpu"     # "cpu" | "cuda" | "mps"
+
+    # Optional — only needed if switching back to OpenAI embeddings
+    openai_api_key: SecretStr | None = None
 
     # ── Reranker ──────────────────────────────────────────────────────────────
     cohere_api_key: SecretStr = Field(..., description="Cohere API key for reranking")

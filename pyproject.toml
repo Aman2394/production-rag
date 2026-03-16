@@ -15,8 +15,9 @@ dependencies = [
     "langchain-anthropic>=0.3.0",
     # LLM
     "anthropic>=0.40.0",
-    # Embeddings
-    "openai>=1.50.0",
+    # Embeddings (local BGE model via sentence-transformers)
+    "sentence-transformers>=3.0.0",
+    "torch>=2.0.0",
     # Vector store
     "qdrant-client>=1.12.0",
     # Sparse retrieval
