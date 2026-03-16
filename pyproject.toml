@@ -43,6 +43,10 @@ dependencies = [
     # Async utilities
     "httpx>=0.28.0",
     "aiofiles>=24.1.0",
+    # Memory — short-term (Redis)
+    "redis[asyncio]>=5.0.0",
+    # Memory — long-term (PostgreSQL, optional)
+    "asyncpg>=0.29.0",
 ]
 
 [project.optional-dependencies]

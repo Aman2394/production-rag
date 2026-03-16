@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=20, gt=0, description="Candidates sent to reranker")
     rerank_top_n: int = Field(default=5, gt=0, description="Final docs returned to LLM")
 
+    # ── Memory — short-term (Redis, required for conversation history) ─────────
+    redis_url: str = "redis://localhost:6379"
+    redis_history_ttl: int = Field(default=86400, description="Session TTL in seconds (24h)")
+    redis_max_history: int = Field(default=20, description="Max messages kept per session (10 turns)")
+
+    # ── Memory — long-term (PostgreSQL, optional) ─────────────────────────────
+    postgres_url: str | None = None  # e.g. postgresql://user:pass@localhost/ragdb
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
