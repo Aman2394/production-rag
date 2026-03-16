@@ -29,11 +29,9 @@ def test_extract_no_citations() -> None:
 
 
 def test_validate_passes_with_valid_citations() -> None:
-    response = f"Claim [{_UUID1}]."
-    validate_citations(response, valid_chunk_ids={_UUID1})  # Should not raise
+    validate_citations([_UUID1], valid_chunk_ids={_UUID1})  # Should not raise
 
 
 def test_validate_raises_on_invalid_citation() -> None:
-    response = f"Claim [{_UUID1}]."
     with pytest.raises(CitationError):
-        validate_citations(response, valid_chunk_ids={_UUID2})
+        validate_citations([_UUID1], valid_chunk_ids={_UUID2})
