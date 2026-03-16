@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "production-rag"
+version = "0.1.0"
+description = "Production-grade domain-specific RAG system with hybrid retrieval, reranking, and citation enforcement"
+requires-python = ">=3.11"
+dependencies = [
+    # Orchestration
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.3.0",
+    # LLM
+    "anthropic>=0.40.0",
+    # Embeddings
+    "openai>=1.50.0",
+    # Vector store
+    "qdrant-client>=1.12.0",
+    # Sparse retrieval
+    "rank-bm25>=0.2.2",
+    # Reranker
+    "cohere>=5.0.0",
+    # API layer
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    # Config / validation
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.0",
+    # Observability
+    "langfuse>=2.50.0",
+    "langsmith>=0.2.0",
+    "structlog>=24.4.0",
+    # Document loaders
+    "pypdf>=5.0.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.3.0",
+    "unstructured>=0.16.0",
+    # Async utilities
+    "httpx>=0.28.0",
+    "aiofiles>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Evaluation
+    "ragas>=0.2.0",
+    "datasets>=3.0.0",
+    # Testing
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",  # For FastAPI TestClient async
+    # Linting / typing
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-aiofiles>=24.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
