@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── LLM ───────────────────────────────────────────────────────────────────
-    anthropic_api_key: SecretStr = Field(..., description="Anthropic API key")
+    # anthropic_api_key: SecretStr = Field(..., description="Anthropic API key")
+    anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-4-6"
 
     # ── Embeddings (local sentence-transformers) ──────────────────────────────
@@ -33,9 +34,12 @@ class Settings(BaseSettings):
     # Optional — only needed if switching back to OpenAI embeddings
     openai_api_key: SecretStr | None = None
 
-    # ── Reranker ──────────────────────────────────────────────────────────────
-    cohere_api_key: SecretStr = Field(..., description="Cohere API key for reranking")
-    cohere_rerank_model: str = "rerank-english-v3.0"
+    # ── Reranker (local BGE cross-encoder) ───────────────────────────────────
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str = "cpu"      # "cpu" | "cuda" | "mps"
+
+    # Optional — only needed if switching to Cohere Rerank API
+    cohere_api_key: SecretStr | None = None
 
     # ── Vector Store ──────────────────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
