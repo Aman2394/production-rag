@@ -8,7 +8,9 @@ Supports optional conversation memory via session_id. When history is present:
 
 import structlog
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.language_models import BaseChatModel
 
 from app.config import get_settings
 from app.exceptions import CitationError, GenerationError
@@ -68,14 +70,37 @@ def _build_citations(cited_ids: list[str], chunks: list[dict]) -> list[Citation]
     return citations
 
 
-def _get_llm() -> ChatAnthropic:
-    if not _settings.anthropic_api_key:
-        raise GenerationError(
-            "ANTHROPIC_API_KEY is not set. Add it to your .env file."
+def _get_llm() -> BaseChatModel:
+    """Return the configured LLM instance.
+
+    Selects the provider based on ``settings.llm_provider``:
+    - ``"ollama"`` — local Ollama server, no API key required.
+    - ``"anthropic"`` — Anthropic API, requires ``ANTHROPIC_API_KEY``.
+
+    Returns:
+        A LangChain chat model instance.
+
+    Raises:
+        GenerationError: If the provider is unknown or required credentials
+            are missing.
+    """
+    if _settings.llm_provider == "ollama":
+        return ChatOllama(
+            model=_settings.ollama_model,
+            base_url=_settings.ollama_base_url,
         )
-    return ChatAnthropic(
-        model=_settings.anthropic_model,
-        api_key=_settings.anthropic_api_key.get_secret_value(),
+    if _settings.llm_provider == "anthropic":
+        if not _settings.anthropic_api_key:
+            raise GenerationError(
+                "ANTHROPIC_API_KEY is not set. Add it to your .env file."
+            )
+        return ChatAnthropic(
+            model=_settings.anthropic_model,
+            api_key=_settings.anthropic_api_key.get_secret_value(),
+        )
+    raise GenerationError(
+        f"Unknown LLM_PROVIDER '{_settings.llm_provider}'. "
+        "Valid options: 'ollama', 'anthropic'."
     )
 
 

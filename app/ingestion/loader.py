@@ -8,7 +8,8 @@ import structlog
 from langchain_community.document_loaders import (
     BSHTMLLoader,
     PyPDFLoader,
-    UnstructuredMarkdownLoader,
+    TextLoader,
+    WebBaseLoader,
 )
 from langchain_core.documents import Document
 
@@ -20,8 +21,8 @@ _SUFFIX_LOADERS: dict[str, type] = {
     ".pdf": PyPDFLoader,
     ".html": BSHTMLLoader,
     ".htm": BSHTMLLoader,
-    ".md": UnstructuredMarkdownLoader,
-    ".markdown": UnstructuredMarkdownLoader,
+    ".md": TextLoader,
+    ".markdown": TextLoader,
 }
 
 
@@ -80,7 +81,7 @@ async def load_document(source: str) -> list[Document]:
 
     try:
         if _is_url(source):
-            docs = BSHTMLLoader(source).load()
+            docs = WebBaseLoader(source).load()
             logger.info("loader.complete", source=source, total=len(docs))
             return docs
 
