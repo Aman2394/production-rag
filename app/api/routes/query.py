@@ -9,6 +9,7 @@ from app.api.schemas import QueryRequest, QueryResponse
 from app.exceptions import GenerationError, RetrievalError
 from app.generation.chain import contextualize_question, generate
 from app.memory.manager import get_history, save_turn
+from app.observability.metrics import track_request
 from app.retrieval.pipeline import retrieve
 
 logger = structlog.get_logger(__name__)
@@ -40,25 +41,30 @@ async def query(request: QueryRequest) -> QueryResponse:
     logger.info("query.received", question=request.question, session_id=session_id)
 
     try:
-        # 1. Load short-term conversation history
-        history = await get_history(session_id)
+        async with track_request("total"):
+            # 1. Load short-term conversation history
+            async with track_request("memory.load"):
+                history = await get_history(session_id)
 
-        # 2. Contextualise the question for retrieval if there's prior history
-        retrieval_query = await contextualize_question(request.question, history)
+            # 2. Contextualise the question for retrieval if there's prior history
+            async with track_request("contextualize"):
+                retrieval_query = await contextualize_question(request.question, history)
 
-        # 3. Retrieve relevant chunks using the standalone query
-        chunks = await retrieve(retrieval_query, top_n=request.top_k)
+            # 3. Retrieve relevant chunks using the standalone query
+            async with track_request("retrieval"):
+                chunks = await retrieve(retrieval_query, top_n=request.top_k)
 
-        # 4. Generate grounded answer with history context
-        answer, citations = await generate(
-            request.question,
-            chunks,
-            history=history or None,
-        )
+            # 4. Generate grounded answer with history context
+            async with track_request("generation"):
+                answer, citations = await generate(
+                    request.question,
+                    chunks,
+                    history=history or None,
+                )
 
-        # 5. Save turn to memory layers (non-blocking failures handled inside)
-        citations_as_dicts = [c.model_dump() for c in citations]
-        await save_turn(session_id, request.question, answer, citations_as_dicts)
+            # 5. Save turn to memory layers (non-blocking failures handled inside)
+            citations_as_dicts = [c.model_dump() for c in citations]
+            await save_turn(session_id, request.question, answer, citations_as_dicts)
 
         logger.info(
             "query.complete",

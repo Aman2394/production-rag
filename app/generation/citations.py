@@ -33,6 +33,8 @@ def validate_citations(
     Raises:
         CitationError: If any cited ID is not present in the context.
     """
+    if not cited_ids:
+        raise CitationError("Response contains no citations. Every claim must be cited.")
     invalid = [cid for cid in cited_ids if cid not in valid_chunk_ids]
     if invalid:
         raise CitationError(
