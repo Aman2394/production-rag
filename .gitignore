@@ -21,8 +21,11 @@ __pycache__/
 .vscode/
 .idea/
 
-# Data
-data/
+# Data — ignore uploaded/processed files but keep the sample docs directory
+data/**
+!data/
+!data/sample_docs/
+!data/sample_docs/.gitkeep
 
 # OS
 .DS_Store
