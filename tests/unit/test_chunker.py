@@ -20,7 +20,9 @@ def test_splitter_splits_text() -> None:
 
 def test_splitter_respects_chunk_size() -> None:
     splitter = build_splitter(chunk_size=100, chunk_overlap=0)
-    text = "A" * 500
+    # Use text with natural separators so the splitter can actually split
+    text = ("This is a sentence that is long enough to force splitting. " * 10).strip()
     chunks = splitter.split_text(text)
+    assert len(chunks) > 1
     for chunk in chunks:
         assert len(chunk) <= 100

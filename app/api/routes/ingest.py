@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import IngestRequest, IngestResponse
 from app.exceptions import IngestionError
+from app.ingestion.pipeline import run_ingestion
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -25,8 +26,8 @@ async def ingest(request: IngestRequest) -> IngestResponse:
     """
     logger.info("ingest.received", source=request.source)
     try:
-        # TODO: wire up ingestion.pipeline
-        raise NotImplementedError("Ingestion pipeline not yet implemented.")
+        chunks_ingested = await run_ingestion(request.source)
+        return IngestResponse(chunks_ingested=chunks_ingested, source=request.source)
     except IngestionError as exc:
         logger.error("ingest.failed", error=str(exc))
         raise HTTPException(status_code=500, detail=str(exc)) from exc
