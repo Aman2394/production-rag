@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # Groq (optional — set llm_provider=groq to use; free tier: 14 400 req/day)
     groq_api_key: SecretStr | None = None
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "llama-3.1-8b-instant"
 
     # ── Embeddings (local sentence-transformers) ──────────────────────────────
     embedding_model: str = "BAAI/bge-large-en-v1.5"

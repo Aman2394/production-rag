@@ -1,5 +1,7 @@
 """Qdrant client wrapper for dense vector upsert and retrieval."""
 
+from functools import lru_cache
+
 import structlog
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
@@ -18,6 +20,7 @@ logger = structlog.get_logger(__name__)
 _settings = get_settings()
 
 
+@lru_cache(maxsize=1)
 def _get_client() -> AsyncQdrantClient:
     api_key = (
         _settings.qdrant_api_key.get_secret_value() if _settings.qdrant_api_key else None
@@ -45,8 +48,6 @@ async def ensure_collection() -> None:
             logger.info("vector_store.collection_created", name=_settings.qdrant_collection_name)
     except Exception as exc:
         raise RetrievalError(f"Failed to ensure Qdrant collection: {exc}") from exc
-    finally:
-        await client.close()
 
 
 async def upsert_chunks(chunks: list[dict]) -> None:
@@ -86,8 +87,6 @@ async def upsert_chunks(chunks: list[dict]) -> None:
         logger.info("vector_store.upserted", count=len(points))
     except Exception as exc:
         raise RetrievalError(f"Qdrant upsert failed: {exc}") from exc
-    finally:
-        await client.close()
 
 
 async def similarity_search(
@@ -132,5 +131,3 @@ async def similarity_search(
         ]
     except Exception as exc:
         raise RetrievalError(f"Qdrant similarity search failed: {exc}") from exc
-    finally:
-        await client.close()

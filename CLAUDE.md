@@ -16,7 +16,7 @@ LLM providers — Ollama (local), Anthropic Claude, and Groq (free tier).
 |--------------------|------------------------------------------------------------------------|----------|
 | Language           | Python 3.11+                                                           | ✅ Done  |
 | Orchestration      | LangChain (LCEL chains)                                                | ✅ Done  |
-| LLM                | Ollama (local) · Anthropic Claude · Groq (free tier) via LangChain    | ✅ Done  |
+| LLM                | Ollama (local) · Anthropic Claude · Groq (free tier) via LangChain     | ✅ Done  |
 | Embeddings         | BGE-large-en-v1.5 via sentence-transformers (local)                    | ✅ Done  |
 | Vector Store       | Qdrant (local Docker for dev, cloud for prod)                          | ✅ Done  |
 | Sparse Retrieval   | BM25 via rank_bm25 (per-namespace indexes)                             | ✅ Done  |

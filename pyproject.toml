@@ -52,6 +52,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = [
+    "streamlit>=1.31.0",
+]
 dev = [
     # Evaluation
     "ragas>=0.2.0",
