@@ -6,6 +6,9 @@ Supports optional conversation memory via session_id. When history is present:
   3. The completed turn is saved to Redis (short-term) and optionally PostgreSQL.
 """
 
+from collections.abc import AsyncGenerator
+from typing import Any
+
 import structlog
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
@@ -22,6 +25,7 @@ from app.generation.prompts import (
     format_history,
 )
 from app.api.schemas import Citation
+from app.observability.langfuse_client import get_langfuse_handler
 
 logger = structlog.get_logger(__name__)
 _settings = get_settings()
@@ -74,11 +78,12 @@ def _get_llm() -> BaseChatModel:
     """Return the configured LLM instance.
 
     Selects the provider based on ``settings.llm_provider``:
-    - ``"ollama"`` — local Ollama server, no API key required.
-    - ``"anthropic"`` — Anthropic API, requires ``ANTHROPIC_API_KEY``.
+    - ``"ollama"``     — local Ollama server, no API key required.
+    - ``"anthropic"``  — Anthropic API, requires ``ANTHROPIC_API_KEY``.
+    - ``"groq"``       — Groq API (free tier), requires ``GROQ_API_KEY``.
 
     Returns:
-        A LangChain chat model instance.
+        A LangChain chat model instance (temperature=0 for citation compliance).
 
     Raises:
         GenerationError: If the provider is unknown or required credentials
@@ -88,6 +93,7 @@ def _get_llm() -> BaseChatModel:
         return ChatOllama(
             model=_settings.ollama_model,
             base_url=_settings.ollama_base_url,
+            temperature=0,
         )
     if _settings.llm_provider == "anthropic":
         if not _settings.anthropic_api_key:
@@ -97,11 +103,34 @@ def _get_llm() -> BaseChatModel:
         return ChatAnthropic(
             model=_settings.anthropic_model,
             api_key=_settings.anthropic_api_key.get_secret_value(),
+            temperature=0,
+        )
+    if _settings.llm_provider == "groq":
+        if not _settings.groq_api_key:
+            raise GenerationError(
+                "GROQ_API_KEY is not set. Add it to your .env file."
+            )
+        try:
+            from langchain_groq import ChatGroq  # noqa: PLC0415
+        except ImportError as exc:
+            raise GenerationError(
+                "langchain-groq is not installed. Run: pip install langchain-groq"
+            ) from exc
+        return ChatGroq(
+            model=_settings.groq_model,
+            api_key=_settings.groq_api_key.get_secret_value(),
+            temperature=0,
         )
     raise GenerationError(
         f"Unknown LLM_PROVIDER '{_settings.llm_provider}'. "
-        "Valid options: 'ollama', 'anthropic'."
+        "Valid options: 'ollama', 'anthropic', 'groq'."
     )
+
+
+def _langfuse_config() -> dict[str, Any]:
+    """Return a LangChain RunnableConfig with Langfuse callbacks when configured."""
+    handler = get_langfuse_handler()
+    return {"callbacks": [handler]} if handler is not None else {}
 
 
 async def _invoke_chain(
@@ -128,15 +157,48 @@ async def _invoke_chain(
     llm = _get_llm()
     if history:
         chain = RAG_PROMPT_WITH_HISTORY | llm | StrOutputParser()
-        inputs = {"context": context, "question": question, "history": history}
+        inputs: dict[str, str] = {"context": context, "question": question, "history": history}
     else:
         chain = RAG_PROMPT | llm | StrOutputParser()
         inputs = {"context": context, "question": question}
 
     try:
-        return await chain.ainvoke(inputs)
+        return await chain.ainvoke(inputs, config=_langfuse_config())
     except Exception as exc:
         raise GenerationError(f"LLM call failed: {exc}") from exc
+
+
+async def _stream_chain(
+    context: str,
+    question: str,
+    history: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream raw tokens from the LCEL chain. Extracted so tests can patch it.
+
+    Args:
+        context: Formatted context string from retrieved chunks.
+        question: The user's question.
+        history: Optional formatted conversation history string.
+
+    Yields:
+        Token strings as they arrive from the LLM.
+
+    Raises:
+        GenerationError: If the streaming call fails.
+    """
+    llm = _get_llm()
+    if history:
+        chain = RAG_PROMPT_WITH_HISTORY | llm | StrOutputParser()
+        inputs: dict[str, str] = {"context": context, "question": question, "history": history}
+    else:
+        chain = RAG_PROMPT | llm | StrOutputParser()
+        inputs = {"context": context, "question": question}
+
+    try:
+        async for token in chain.astream(inputs, config=_langfuse_config()):
+            yield token
+    except Exception as exc:
+        raise GenerationError(f"LLM streaming failed: {exc}") from exc
 
 
 async def contextualize_question(
@@ -162,7 +224,8 @@ async def contextualize_question(
         llm = _get_llm()
         chain = CONTEXTUALIZE_PROMPT | llm | StrOutputParser()
         standalone: str = await chain.ainvoke(
-            {"history": format_history(history), "question": question}
+            {"history": format_history(history), "question": question},
+            config=_langfuse_config(),
         )
         logger.info(
             "generation.contextualised",
@@ -240,3 +303,67 @@ async def generate(
     raise GenerationError(
         f"Response had invalid citations after {_MAX_RETRIES} attempts: {last_error}"
     )
+
+
+async def stream_generate(
+    question: str,
+    chunks: list[dict],
+    history: list[dict[str, str]] | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Stream RAG generation token-by-token, yielding Server-Sent Event dicts.
+
+    Yields one ``token`` event per LLM token, then a single ``done`` event
+    containing the full answer and validated citations. On failure, yields an
+    ``error`` event instead. Citation validation runs after all tokens are
+    received; if it fails, valid citations are filtered and returned rather
+    than raising (graceful degradation — the answer is already streamed).
+
+    Event shapes::
+
+        {"type": "token",  "content": "<token>"}
+        {"type": "done",   "answer": "<full answer>", "citations": [...]}
+        {"type": "error",  "detail": "<message>"}
+
+    Args:
+        question: The user's natural language question.
+        chunks: Reranked chunk dicts from the retrieval pipeline.
+        history: Optional conversation history.
+
+    Yields:
+        Event dicts suitable for JSON-encoding into SSE ``data:`` lines.
+    """
+    if not chunks:
+        yield {"type": "error", "detail": "No chunks provided — run retrieval before generation."}
+        return
+
+    context = _format_context(chunks)
+    valid_ids = {c["chunk_id"] for c in chunks}
+    history_str = format_history(history) if history else None
+
+    # Stream tokens from the LLM
+    full_answer = ""
+    try:
+        async for token in _stream_chain(context, question, history=history_str):
+            full_answer += token
+            yield {"type": "token", "content": token}
+    except GenerationError as exc:
+        yield {"type": "error", "detail": str(exc)}
+        return
+
+    # Post-stream citation validation — degrade gracefully on failure
+    try:
+        cited_ids = extract_cited_ids(full_answer)
+        validate_citations(cited_ids, valid_ids)
+        citations = _build_citations(cited_ids, chunks)
+    except CitationError:
+        # Filter to only the chunk IDs that actually exist in context
+        cited_ids = [cid for cid in extract_cited_ids(full_answer) if cid in valid_ids]
+        citations = _build_citations(cited_ids, chunks)
+        logger.warning("stream_generate.citation_degraded", question=question)
+
+    logger.info("stream_generate.complete", citations=len(citations))
+    yield {
+        "type": "done",
+        "answer": full_answer,
+        "citations": [c.model_dump() for c in citations],
+    }

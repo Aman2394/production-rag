@@ -10,25 +10,26 @@ from app.ingestion.pipeline import _build_chunks, run_ingestion
 
 def test_build_chunks_assigns_required_metadata() -> None:
     docs = [Document(page_content="Hello world. " * 20, metadata={"page": 1})]
-    chunks = _build_chunks(docs, source="test.pdf")
+    chunks = _build_chunks(docs, source="test.pdf", namespace="test-ns")
     assert len(chunks) > 0
     for chunk in chunks:
         assert "chunk_id" in chunk
         assert "content" in chunk
         assert chunk["metadata"]["source"] == "test.pdf"
         assert chunk["metadata"]["page"] == 1
+        assert chunk["metadata"]["namespace"] == "test-ns"
         assert "ingested_at" in chunk["metadata"]
 
 
 def test_build_chunks_skips_empty_splits() -> None:
     docs = [Document(page_content="   \n\n   ", metadata={})]
-    chunks = _build_chunks(docs, source="empty.md")
+    chunks = _build_chunks(docs, source="empty.md", namespace="default")
     assert chunks == []
 
 
 def test_build_chunks_unique_chunk_ids() -> None:
     docs = [Document(page_content="Word " * 200, metadata={})]
-    chunks = _build_chunks(docs, source="test.md")
+    chunks = _build_chunks(docs, source="test.md", namespace="default")
     ids = [c["chunk_id"] for c in chunks]
     assert len(ids) == len(set(ids))
 
@@ -43,7 +44,7 @@ async def test_run_ingestion_returns_chunk_count() -> None:
         patch("app.ingestion.pipeline.upsert_chunks", AsyncMock()),
         patch("app.ingestion.pipeline.add_chunks", AsyncMock()),
     ):
-        count = await run_ingestion("test.pdf")
+        count = await run_ingestion("test.pdf", namespace="default")
         assert count > 0
 
 
@@ -53,4 +54,4 @@ async def test_run_ingestion_raises_on_load_failure() -> None:
 
     with patch("app.ingestion.pipeline.load_document", AsyncMock(side_effect=IngestionError("not found"))):
         with pytest.raises(IngestionError):
-            await run_ingestion("missing.pdf")
+            await run_ingestion("missing.pdf", namespace="default")

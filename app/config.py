@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str = "claude-sonnet-4-6"
 
+    # Groq (optional — set llm_provider=groq to use; free tier: 14 400 req/day)
+    groq_api_key: SecretStr | None = None
+    groq_model: str = "llama-3.3-70b-versatile"
+
     # ── Embeddings (local sentence-transformers) ──────────────────────────────
     embedding_model: str = "BAAI/bge-large-en-v1.5"
     embedding_dimensions: int = 1024  # BGE-large-en-v1.5 output size

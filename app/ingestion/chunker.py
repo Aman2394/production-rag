@@ -8,7 +8,7 @@ _settings = get_settings()
 
 SEPARATORS = ["\n\n", "\n", ". ", " "]
 
-
+# TODO: make the chunking strategy also configurable
 def build_splitter(
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,

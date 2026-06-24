@@ -26,8 +26,12 @@ async def ingest(request: IngestRequest) -> IngestResponse:
     """
     logger.info("ingest.received", source=request.source)
     try:
-        chunks_ingested = await run_ingestion(request.source)
-        return IngestResponse(chunks_ingested=chunks_ingested, source=request.source)
+        chunks_ingested = await run_ingestion(request.source, namespace=request.namespace)
+        return IngestResponse(
+            chunks_ingested=chunks_ingested,
+            source=request.source,
+            namespace=request.namespace,
+        )
     except IngestionError as exc:
         logger.error("ingest.failed", error=str(exc))
         raise HTTPException(status_code=500, detail=str(exc)) from exc

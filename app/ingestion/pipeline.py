@@ -17,12 +17,14 @@ from app.retrieval.vector_store import upsert_chunks
 logger = structlog.get_logger(__name__)
 
 
-def _build_chunks(docs: list[Document], source: str) -> list[dict]:
+def _build_chunks(docs: list[Document], source: str, namespace: str) -> list[dict]:
     """Split LangChain Documents into chunks with required metadata.
 
     Args:
         docs: Raw documents returned by the loader.
         source: Original source path or URL (used as metadata).
+        namespace: Namespace tag written into every chunk's metadata so both
+            Qdrant (payload filter) and BM25 (separate index) can isolate results.
 
     Returns:
         List of chunk dicts with ``chunk_id``, ``content``, and ``metadata``.
@@ -46,6 +48,7 @@ def _build_chunks(docs: list[Document], source: str) -> list[dict]:
                         "source": source,
                         "page": page,
                         "ingested_at": ingested_at,
+                        "namespace": namespace,
                     },
                 }
             )
@@ -53,14 +56,17 @@ def _build_chunks(docs: list[Document], source: str) -> list[dict]:
     return chunks
 
 
-async def run_ingestion(source: str) -> int:
-    """Run the full ingestion pipeline for a single source.
+async def run_ingestion(source: str, namespace: str = "default") -> int:
+    """Run the full ingestion pipeline for a single source into a namespace.
 
-    Loads the document, splits it into chunks, embeds all chunks in
-    parallel batches, then upserts to Qdrant and the BM25 index concurrently.
+    Loads the document, splits it into chunks tagged with ``namespace``,
+    embeds all chunks, then upserts to Qdrant and the BM25 index concurrently.
+    Both stores are scoped to the namespace so queries from other namespaces
+    cannot access this data.
 
     Args:
         source: File path or URL to ingest.
+        namespace: Target namespace (knowledge base) for this document.
 
     Returns:
         Number of chunks successfully ingested.
@@ -68,13 +74,13 @@ async def run_ingestion(source: str) -> int:
     Raises:
         IngestionError: If any stage of the pipeline fails.
     """
-    logger.info("ingestion.start", source=source)
+    logger.info("ingestion.start", source=source, namespace=namespace)
     try:
         # 1. Load
         docs = await load_document(source)
 
-        # 2. Chunk
-        chunks = _build_chunks(docs, source)
+        # 2. Chunk — namespace is written into every chunk's metadata
+        chunks = _build_chunks(docs, source, namespace)
         if not chunks:
             logger.warning("ingestion.no_chunks", source=source)
             return 0
@@ -90,11 +96,11 @@ async def run_ingestion(source: str) -> int:
 
         # 4. Store — upsert to Qdrant and BM25 concurrently
         await asyncio.gather(
-            upsert_chunks(chunks),
-            add_chunks(chunks),
+            upsert_chunks(chunks),               # namespace flows via chunk["metadata"]
+            add_chunks(chunks, namespace),
         )
 
-        logger.info("ingestion.complete", source=source, chunks=len(chunks))
+        logger.info("ingestion.complete", source=source, namespace=namespace, chunks=len(chunks))
         return len(chunks)
 
     except IngestionError:

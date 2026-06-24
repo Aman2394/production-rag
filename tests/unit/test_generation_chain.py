@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.exceptions import CitationError, GenerationError
-from app.generation.chain import _build_citations, _format_context, generate
+from app.generation.chain import _build_citations, _format_context, generate, stream_generate
 
 _UUID1 = "550e8400-e29b-41d4-a716-446655440000"
 _UUID2 = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
@@ -119,3 +119,75 @@ async def test_generate_raises_when_no_api_key() -> None:
         mock_settings.anthropic_api_key = None
         with pytest.raises(GenerationError, match="ANTHROPIC_API_KEY"):
             await generate("question?", _CHUNKS)
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_when_no_groq_key() -> None:
+    with patch("app.generation.chain._settings") as mock_settings:
+        mock_settings.llm_provider = "groq"
+        mock_settings.groq_api_key = None
+        with pytest.raises(GenerationError, match="GROQ_API_KEY"):
+            await generate("question?", _CHUNKS)
+
+
+@pytest.mark.asyncio
+async def test_generate_raises_on_unknown_provider() -> None:
+    with patch("app.generation.chain._settings") as mock_settings:
+        mock_settings.llm_provider = "openai"
+        with pytest.raises(GenerationError, match="Unknown LLM_PROVIDER"):
+            await generate("question?", _CHUNKS)
+
+
+# ── stream_generate tests ─────────────────────────────────────────────────────
+
+async def _collect(gen):
+    """Drain an async generator into a list."""
+    events = []
+    async for event in gen:
+        events.append(event)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_stream_generate_yields_tokens_then_done() -> None:
+    valid_answer = f"The sky is blue [{_UUID1}]."
+
+    async def fake_stream(context: str, question: str, history: str | None = None):
+        for char in valid_answer:
+            yield char
+
+    with patch("app.generation.chain._stream_chain", fake_stream):
+        events = await _collect(stream_generate("What color is the sky?", _CHUNKS))
+
+    token_events = [e for e in events if e["type"] == "token"]
+    done_events = [e for e in events if e["type"] == "done"]
+
+    assert "".join(e["content"] for e in token_events) == valid_answer
+    assert len(done_events) == 1
+    assert done_events[0]["answer"] == valid_answer
+    assert done_events[0]["citations"][0]["chunk_id"] == _UUID1
+
+
+@pytest.mark.asyncio
+async def test_stream_generate_yields_error_on_empty_chunks() -> None:
+    events = await _collect(stream_generate("question?", []))
+    assert events == [{"type": "error", "detail": "No chunks provided — run retrieval before generation."}]
+
+
+@pytest.mark.asyncio
+async def test_stream_generate_degrades_gracefully_on_bad_citation() -> None:
+    # Answer cites a UUID not present in _CHUNKS — should still produce a done event
+    unknown_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    bad_answer = f"Some claim [{unknown_uuid}]."
+
+    async def fake_stream(context: str, question: str, history: str | None = None):
+        for char in bad_answer:
+            yield char
+
+    with patch("app.generation.chain._stream_chain", fake_stream):
+        events = await _collect(stream_generate("question?", _CHUNKS))
+
+    done = next(e for e in events if e["type"] == "done")
+    # Citations list is empty because the cited ID doesn't exist in context
+    assert done["citations"] == []
+    assert done["answer"] == bad_answer

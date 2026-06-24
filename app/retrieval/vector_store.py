@@ -4,6 +4,9 @@ import structlog
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
     PointStruct,
     VectorParams,
 )
@@ -89,12 +92,14 @@ async def upsert_chunks(chunks: list[dict]) -> None:
 
 async def similarity_search(
     query_vector: list[float],
+    namespace: str,
     top_k: int | None = None,
 ) -> list[dict]:
-    """Retrieve the top-k most similar chunks from Qdrant.
+    """Retrieve the top-k most similar chunks from Qdrant within a namespace.
 
     Args:
         query_vector: Dense embedding of the query.
+        namespace: Namespace to restrict the search to.
         top_k: Number of results to return; defaults to ``settings.retrieval_top_k``.
 
     Returns:
@@ -110,6 +115,9 @@ async def similarity_search(
             collection_name=_settings.qdrant_collection_name,
             query=query_vector,
             limit=k,
+            query_filter=Filter(
+                must=[FieldCondition(key="namespace", match=MatchValue(value=namespace))]
+            ),
         )
         return [
             {
